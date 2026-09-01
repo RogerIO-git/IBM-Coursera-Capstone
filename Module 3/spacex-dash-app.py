@@ -1,9 +1,10 @@
 # Import required libraries
 import pandas as pd
-import dash
-from dash import html
-from dash import dcc
-from dash.dependencies import Input, Output
+# import dash
+# from dash import html
+# from dash import dcc
+from dash import Dash, html, dcc, Input, Output
+# from dash.dependencies import Input, Output
 import plotly.express as px
 
 # Read the airline data into pandas dataframe
@@ -12,7 +13,7 @@ max_payload = spacex_df['Payload Mass (kg)'].max()
 min_payload = spacex_df['Payload Mass (kg)'].min()
 
 # Create a dash application
-app = dash.Dash(__name__)
+app = Dash(__name__)
 
 launch_sites = []
 launch_sites.append({'label': 'All Sites', 'value': 'All Sites'})
@@ -49,34 +50,79 @@ app.layout = html.Div(children=[html.H1('SpaceX Launch Records Dashboard',
                Input(component_id='site-dropdown', component_property='value'))
 def select(input):
     if input == 'All Sites':
-        new_df = spacex_df.groupby(['Launch Site'])["class"].sum().to_frame()
-        new_df = new_df.reset_index()
-        graph1 = px.pie(new_df, values='class', names='Launch Site', title='Total Successful Launches by Site')
+        new_df = spacex_df.groupby(['Launch Site'])['class'].sum().reset_index()
+
+        graph1 = px.pie(
+            new_df,
+            values='class',
+            names='Launch Site',
+            title='Total Successful Launches by Site'
+        )
     else:
-        new_df = spacex_df[spacex_df["Launch Site"] == input]["class"].value_counts().to_frame()
-        new_df["name"] = ["Failure", "Success"]
-        graph1 = px.pie(new_df, values='class', names='name', title='Total Successful Launches for ' + input)
+        site_df = spacex_df[spacex_df["Launch Site"] == input]
+
+        success = (site_df["class"] == 1).sum()
+        failure = (site_df["class"] == 0).sum()
+        new_df = pd.DataFrame({
+            'Outcome': ['Failure', 'Success'],
+            'Count': [failure, success]
+        })
+        graph1 = px.pie(
+            new_df,
+            values='Count',
+            names='Outcome',
+            title='Total Successful Launches for ' + input
+        )
     return graph1
 
 # TASK 4:
 # Add a callback function for `site-dropdown` and `payload-slider` as inputs, `success-payload-scatter-chart` as output
-@app.callback( Output(component_id='success-payload-scatter-chart', component_property='figure'),
-               Input(component_id='site-dropdown', component_property='value'), Input(component_id='payload-slider', component_property='value') 
+@app.callback(
+    Output('success-payload-scatter-chart', 'figure'),
+    [
+        Input('site-dropdown', 'value'),
+        Input('payload-slider', 'value')
+    ]
 )
 def scatter(input1, input2):
-    print(input1)
-    print(input2)
-    if input1 == 'All Sites':
-        df_pmGreater= spacex_df[spacex_df["Payload Mass (kg)"] >= input2[0]]
-        df_pmLess = df_pmGreater[spacex_df["Payload Mass (kg)"] <= input2[1]]
-        graph2 = px.scatter(df_pmLess, y="class", x="Payload Mass (kg)", color="Booster Version Category")
-    else:
-        new_df = spacex_df[spacex_df["Launch Site"] == input1]
-        df_greater = new_df[spacex_df["Payload Mass (kg)"] >= input2[0]]
-        df_less = df_greater[spacex_df["Payload Mass (kg)"] <= input2[1]]
-        graph2 = px.scatter(df_less, y="class", x="Payload Mass (kg)", color="Booster Version Category")
-    return graph2
+
+    print("Selected site:", input1)
+    print("Payload range:", input2)
+
+    # Start with the complete dataframe
+    filtered_df = spacex_df.copy()
+
+    # Filter by launch site
+    if input1 != 'All Sites':
+        filtered_df = filtered_df[
+            filtered_df['Launch Site'] == input1
+        ]
+
+    # Filter by payload
+    filtered_df = filtered_df[
+        (filtered_df['Payload Mass (kg)'] >= input2[0]) &
+        (filtered_df['Payload Mass (kg)'] <= input2[1])
+    ]
+
+    print("Rows after filtering:", len(filtered_df))
+
+    # Create scatter plot
+    fig = px.scatter(
+        filtered_df,
+        x='Payload Mass (kg)',
+        y='class',
+        color='Booster Version Category',
+        title='Payload Mass vs. Launch Success'
+    )
+
+    return fig
+    
 
 # Run the app
 if __name__ == '__main__':
-    app.run()
+    app.run(
+        host='127.0.0.1',
+        port=8050,
+        debug=True,
+        use_reloader=False
+    )
